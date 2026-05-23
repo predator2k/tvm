@@ -23,9 +23,7 @@
  */
 #include <tvm/ffi/function.h>
 #include <tvm/ffi/reflection/registry.h>
-
-namespace tvm {
-namespace runtime {
+#include <tvm/runtime/logging.h>
 
 #ifdef __linux__
 #include <errno.h>
@@ -34,8 +32,8 @@ namespace runtime {
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
-#include <tvm/runtime/logging.h>
 #include <unistd.h>
+#endif
 
 #define XFEATURE_XTILECFG 17
 #define XFEATURE_XTILEDATA 18
@@ -60,6 +58,11 @@ typedef union __union_tile_config {
   uint8_t a[64];
 } __tilecfg_u;
 
+namespace tvm {
+namespace runtime {
+
+#ifdef __linux__
+
 void init_tile_config(__tilecfg_u* dst, uint16_t cols, uint8_t rows) {
   dst->s.palette_id = 1;
   dst->s.start_row = 0;
@@ -77,8 +80,9 @@ void init_tile_config(__tilecfg_u* dst, uint16_t cols, uint8_t rows) {
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {
-  namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def_packed("runtime.amx_tileconfig", [](ffi::PackedArgs args, ffi::Any* rv) {
+  namespace refl = ::tvm::ffi::reflection;
+  refl::GlobalDef().def_packed("runtime.amx_tileconfig", [](::tvm::ffi::PackedArgs args,
+                                                             ::tvm::ffi::Any* rv) {
     int rows = args[0].cast<int>();
     int cols = args[1].cast<int>();
     LOG(INFO) << "rows: " << rows << ", cols:" << cols;
@@ -93,8 +97,9 @@ TVM_FFI_STATIC_INIT_BLOCK() {
 
 // register a global packed function in c++，to init the system for AMX config
 TVM_FFI_STATIC_INIT_BLOCK() {
-  namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def_packed("runtime.amx_init", [](ffi::PackedArgs args, ffi::Any* rv) {
+  namespace refl = ::tvm::ffi::reflection;
+  refl::GlobalDef().def_packed("runtime.amx_init", [](::tvm::ffi::PackedArgs args,
+                                                       ::tvm::ffi::Any* rv) {
     // -----------Detect and request for AMX control----------------------
     uint64_t bitmask = 0;
     int64_t status = syscall(SYS_arch_prctl, ARCH_GET_XCOMP_PERM, &bitmask);
@@ -138,6 +143,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
   });
 }
 
-#endif
+#endif  // __linux__
+
 }  // namespace runtime
 }  // namespace tvm

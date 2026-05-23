@@ -110,6 +110,13 @@ void fp32_to_bf16(const float *src, unsigned short *dst, int n) {
   }
 }
 
+void bf16_to_fp32_convert(const unsigned short *src, float *dst, int n) {
+  for (int i = 0; i < n; i++) {
+    unsigned int bits = ((unsigned int)src[i]) << 16;
+    memcpy(&dst[i], &bits, sizeof(float));
+  }
+}
+
 void softmax_fp32(float *data, int rows, int cols) {
   for (int i = 0; i < rows; i++) {
     float *row = data + i * cols;

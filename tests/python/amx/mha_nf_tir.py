@@ -29,7 +29,7 @@ from tvm.script import tirx as T
 
 from mha_fa_tir import (_ldtilecfg, _tilezero, _tileloadd, _tilestored, _tdpbf16ps,
                          _vec_round, _vec_reduce_fmax, _vec_reduce_fadd,
-                         _vec_cvt32_to_bf16x32, _vec_exp,
+                         _vec_cvt32_to_bf16x32, _vec_exp, _i64,
                          make_pack_K, make_pack_V,
                          init_amx, fp32_to_bf16, bf16_to_fp32, mha_numpy)
 
@@ -65,10 +65,10 @@ def make_gemm_2x2(M, N, K, n_packed_u16):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(Ko):
-                    a_top = (mo * 32) * K + ko * 32
-                    a_bot = (mo * 32 + 16) * K + ko * 32
-                    b_left = (ko * 16) * n_packed_u16 + (no * 32) * 2
-                    b_right = (ko * 16) * n_packed_u16 + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * K + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * K + ko * 32)
+                    b_left = _i64((ko * 16) * n_packed_u16 + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * n_packed_u16 + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, A.access_ptr("r", offset=a_top), a_row_bytes))
                     T.evaluate(_tileloadd(1, A.access_ptr("r", offset=a_bot), a_row_bytes))
                     T.evaluate(_tileloadd(2, B_packed.access_ptr("r", offset=b_left),  b_row_bytes))
@@ -77,10 +77,10 @@ def make_gemm_2x2(M, N, K, n_packed_u16):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                c_tl = (mo * 32) * N + no * 32
-                c_tr = (mo * 32) * N + no * 32 + 16
-                c_bl = (mo * 32 + 16) * N + no * 32
-                c_br = (mo * 32 + 16) * N + no * 32 + 16
+                c_tl = _i64((mo * 32) * N + no * 32)
+                c_tr = _i64((mo * 32) * N + no * 32 + 16)
+                c_bl = _i64((mo * 32 + 16) * N + no * 32)
+                c_br = _i64((mo * 32 + 16) * N + no * 32 + 16)
                 T.evaluate(_tilestored(4, C.access_ptr("w", offset=c_tl), c_row_bytes))
                 T.evaluate(_tilestored(5, C.access_ptr("w", offset=c_tr), c_row_bytes))
                 T.evaluate(_tilestored(6, C.access_ptr("w", offset=c_bl), c_row_bytes))
@@ -203,10 +203,10 @@ def make_mha_nonfused_one(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(Ko_qk):
-                    a_top = (mo * 32) * D + ko * 32
-                    a_bot = (mo * 32 + 16) * D + ko * 32
-                    b_left = (ko * 16) * (SEQ * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * D + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * D + ko * 32)
+                    b_left = _i64((ko * 16) * (SEQ * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, Q.access_ptr("r", offset=a_top), a_row_bytes_Q))
                     T.evaluate(_tileloadd(1, Q.access_ptr("r", offset=a_bot), a_row_bytes_Q))
                     T.evaluate(_tileloadd(2, K_packed.access_ptr("r", offset=b_left),  b_row_bytes_K))
@@ -215,10 +215,10 @@ def make_mha_nonfused_one(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                c_tl = (mo * 32) * SEQ + no * 32
-                c_tr = (mo * 32) * SEQ + no * 32 + 16
-                c_bl = (mo * 32 + 16) * SEQ + no * 32
-                c_br = (mo * 32 + 16) * SEQ + no * 32 + 16
+                c_tl = _i64((mo * 32) * SEQ + no * 32)
+                c_tr = _i64((mo * 32) * SEQ + no * 32 + 16)
+                c_bl = _i64((mo * 32 + 16) * SEQ + no * 32)
+                c_br = _i64((mo * 32 + 16) * SEQ + no * 32 + 16)
                 T.evaluate(_tilestored(4, S.access_ptr("w", offset=c_tl), s_row_bytes))
                 T.evaluate(_tilestored(5, S.access_ptr("w", offset=c_tr), s_row_bytes))
                 T.evaluate(_tilestored(6, S.access_ptr("w", offset=c_bl), s_row_bytes))
@@ -253,10 +253,10 @@ def make_mha_nonfused_one(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(Ko_pv):
-                    a_top = (mo * 32) * SEQ + ko * 32
-                    a_bot = (mo * 32 + 16) * SEQ + ko * 32
-                    b_left = (ko * 16) * (D * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (D * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * SEQ + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * SEQ + ko * 32)
+                    b_left = _i64((ko * 16) * (D * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (D * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, P.access_ptr("r", offset=a_top), a_row_bytes_P))
                     T.evaluate(_tileloadd(1, P.access_ptr("r", offset=a_bot), a_row_bytes_P))
                     T.evaluate(_tileloadd(2, V_packed.access_ptr("r", offset=b_left),  b_row_bytes_V))
@@ -265,10 +265,10 @@ def make_mha_nonfused_one(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                o_tl = (mo * 32) * D + no * 32
-                o_tr = (mo * 32) * D + no * 32 + 16
-                o_bl = (mo * 32 + 16) * D + no * 32
-                o_br = (mo * 32 + 16) * D + no * 32 + 16
+                o_tl = _i64((mo * 32) * D + no * 32)
+                o_tr = _i64((mo * 32) * D + no * 32 + 16)
+                o_bl = _i64((mo * 32 + 16) * D + no * 32)
+                o_br = _i64((mo * 32 + 16) * D + no * 32 + 16)
                 T.evaluate(_tilestored(4, O.access_ptr("w", offset=o_tl), o_row_bytes))
                 T.evaluate(_tilestored(5, O.access_ptr("w", offset=o_tr), o_row_bytes))
                 T.evaluate(_tilestored(6, O.access_ptr("w", offset=o_bl), o_row_bytes))
@@ -330,10 +330,10 @@ def make_mha_mblock_fused(SEQ, D, Mq=32):
                     T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                     T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                     for ko in T.serial(Ko_qk):
-                        a_top = (mo * Mq + mbo * 32) * D + ko * 32
-                        a_bot = (mo * Mq + mbo * 32 + 16) * D + ko * 32
-                        b_left = (ko * 16) * (SEQ * 2) + (no * 32) * 2
-                        b_right = (ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2
+                        a_top = _i64((mo * Mq + mbo * 32) * D + ko * 32)
+                        a_bot = _i64((mo * Mq + mbo * 32 + 16) * D + ko * 32)
+                        b_left = _i64((ko * 16) * (SEQ * 2) + (no * 32) * 2)
+                        b_right = _i64((ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2)
                         T.evaluate(_tileloadd(0, Q.access_ptr("r", offset=a_top), a_row_bytes_Q))
                         T.evaluate(_tileloadd(1, Q.access_ptr("r", offset=a_bot), a_row_bytes_Q))
                         T.evaluate(_tileloadd(2, K_packed.access_ptr("r", offset=b_left),  b_row_bytes_K))
@@ -342,10 +342,10 @@ def make_mha_mblock_fused(SEQ, D, Mq=32):
                         T.evaluate(_tdpbf16ps(5, 0, 3))
                         T.evaluate(_tdpbf16ps(6, 1, 2))
                         T.evaluate(_tdpbf16ps(7, 1, 3))
-                    c_tl = (mbo * 32     ) * SEQ + no * 32
-                    c_tr = (mbo * 32     ) * SEQ + no * 32 + 16
-                    c_bl = (mbo * 32 + 16) * SEQ + no * 32
-                    c_br = (mbo * 32 + 16) * SEQ + no * 32 + 16
+                    c_tl = _i64((mbo * 32     ) * SEQ + no * 32)
+                    c_tr = _i64((mbo * 32     ) * SEQ + no * 32 + 16)
+                    c_bl = _i64((mbo * 32 + 16) * SEQ + no * 32)
+                    c_br = _i64((mbo * 32 + 16) * SEQ + no * 32 + 16)
                     T.evaluate(_tilestored(4, S_mb.access_ptr("w", offset=c_tl), s_row_bytes))
                     T.evaluate(_tilestored(5, S_mb.access_ptr("w", offset=c_tr), s_row_bytes))
                     T.evaluate(_tilestored(6, S_mb.access_ptr("w", offset=c_bl), s_row_bytes))
@@ -383,10 +383,10 @@ def make_mha_mblock_fused(SEQ, D, Mq=32):
                     T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                     T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                     for ko in T.serial(Ko_pv):
-                        a_top = (mbo * 32     ) * SEQ + ko * 32
-                        a_bot = (mbo * 32 + 16) * SEQ + ko * 32
-                        b_left = (ko * 16) * (D * 2) + (no * 32) * 2
-                        b_right = (ko * 16) * (D * 2) + (no * 32 + 16) * 2
+                        a_top = _i64((mbo * 32     ) * SEQ + ko * 32)
+                        a_bot = _i64((mbo * 32 + 16) * SEQ + ko * 32)
+                        b_left = _i64((ko * 16) * (D * 2) + (no * 32) * 2)
+                        b_right = _i64((ko * 16) * (D * 2) + (no * 32 + 16) * 2)
                         T.evaluate(_tileloadd(0, P_mb.access_ptr("r", offset=a_top), a_row_bytes_P))
                         T.evaluate(_tileloadd(1, P_mb.access_ptr("r", offset=a_bot), a_row_bytes_P))
                         T.evaluate(_tileloadd(2, V_packed.access_ptr("r", offset=b_left),  b_row_bytes_V))
@@ -395,10 +395,10 @@ def make_mha_mblock_fused(SEQ, D, Mq=32):
                         T.evaluate(_tdpbf16ps(5, 0, 3))
                         T.evaluate(_tdpbf16ps(6, 1, 2))
                         T.evaluate(_tdpbf16ps(7, 1, 3))
-                    o_tl = (mo * Mq + mbo * 32     ) * D + no * 32
-                    o_tr = (mo * Mq + mbo * 32     ) * D + no * 32 + 16
-                    o_bl = (mo * Mq + mbo * 32 + 16) * D + no * 32
-                    o_br = (mo * Mq + mbo * 32 + 16) * D + no * 32 + 16
+                    o_tl = _i64((mo * Mq + mbo * 32     ) * D + no * 32)
+                    o_tr = _i64((mo * Mq + mbo * 32     ) * D + no * 32 + 16)
+                    o_bl = _i64((mo * Mq + mbo * 32 + 16) * D + no * 32)
+                    o_br = _i64((mo * Mq + mbo * 32 + 16) * D + no * 32 + 16)
                     T.evaluate(_tilestored(4, O.access_ptr("w", offset=o_tl), o_row_bytes))
                     T.evaluate(_tilestored(5, O.access_ptr("w", offset=o_tr), o_row_bytes))
                     T.evaluate(_tilestored(6, O.access_ptr("w", offset=o_bl), o_row_bytes))
@@ -449,10 +449,10 @@ def make_mha_nf_fused_max(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(D // 32):
-                    a_top = (mo * 32) * D + ko * 32
-                    a_bot = (mo * 32 + 16) * D + ko * 32
-                    b_left = (ko * 16) * (SEQ * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * D + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * D + ko * 32)
+                    b_left = _i64((ko * 16) * (SEQ * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, Q.access_ptr("r", offset=a_top), D * 2))
                     T.evaluate(_tileloadd(1, Q.access_ptr("r", offset=a_bot), D * 2))
                     T.evaluate(_tileloadd(2, K_packed.access_ptr("r", offset=b_left), SEQ * 4))
@@ -461,10 +461,10 @@ def make_mha_nf_fused_max(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                c_tl = (mo * 32) * SEQ + no * 32
-                c_tr = (mo * 32) * SEQ + no * 32 + 16
-                c_bl = (mo * 32 + 16) * SEQ + no * 32
-                c_br = (mo * 32 + 16) * SEQ + no * 32 + 16
+                c_tl = _i64((mo * 32) * SEQ + no * 32)
+                c_tr = _i64((mo * 32) * SEQ + no * 32 + 16)
+                c_bl = _i64((mo * 32 + 16) * SEQ + no * 32)
+                c_br = _i64((mo * 32 + 16) * SEQ + no * 32 + 16)
                 T.evaluate(_tilestored(4, S.access_ptr("w", offset=c_tl), SEQ * 4))
                 T.evaluate(_tilestored(5, S.access_ptr("w", offset=c_tr), SEQ * 4))
                 T.evaluate(_tilestored(6, S.access_ptr("w", offset=c_bl), SEQ * 4))
@@ -502,10 +502,10 @@ def make_mha_nf_fused_max(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(SEQ // 32):
-                    a_top = (mo * 32) * SEQ + ko * 32
-                    a_bot = (mo * 32 + 16) * SEQ + ko * 32
-                    b_left = (ko * 16) * (D * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (D * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * SEQ + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * SEQ + ko * 32)
+                    b_left = _i64((ko * 16) * (D * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (D * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, P.access_ptr("r", offset=a_top), SEQ * 2))
                     T.evaluate(_tileloadd(1, P.access_ptr("r", offset=a_bot), SEQ * 2))
                     T.evaluate(_tileloadd(2, V_packed.access_ptr("r", offset=b_left), D * 4))
@@ -514,10 +514,10 @@ def make_mha_nf_fused_max(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                o_tl = (mo * 32) * D + no * 32
-                o_tr = (mo * 32) * D + no * 32 + 16
-                o_bl = (mo * 32 + 16) * D + no * 32
-                o_br = (mo * 32 + 16) * D + no * 32 + 16
+                o_tl = _i64((mo * 32) * D + no * 32)
+                o_tr = _i64((mo * 32) * D + no * 32 + 16)
+                o_bl = _i64((mo * 32 + 16) * D + no * 32)
+                o_br = _i64((mo * 32 + 16) * D + no * 32 + 16)
                 T.evaluate(_tilestored(4, O.access_ptr("w", offset=o_tl), D * 4))
                 T.evaluate(_tilestored(5, O.access_ptr("w", offset=o_tr), D * 4))
                 T.evaluate(_tilestored(6, O.access_ptr("w", offset=o_bl), D * 4))
@@ -568,10 +568,10 @@ def make_mha_nf_full_softmax_fused(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(D // 32):
-                    a_top = (mo * 32) * D + ko * 32
-                    a_bot = (mo * 32 + 16) * D + ko * 32
-                    b_left = (ko * 16) * (SEQ * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * D + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * D + ko * 32)
+                    b_left = _i64((ko * 16) * (SEQ * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (SEQ * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, Q.access_ptr("r", offset=a_top), D * 2))
                     T.evaluate(_tileloadd(1, Q.access_ptr("r", offset=a_bot), D * 2))
                     T.evaluate(_tileloadd(2, K_packed.access_ptr("r", offset=b_left), SEQ * 4))
@@ -580,10 +580,10 @@ def make_mha_nf_full_softmax_fused(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                c_tl = (mo * 32) * SEQ + no * 32
-                c_tr = (mo * 32) * SEQ + no * 32 + 16
-                c_bl = (mo * 32 + 16) * SEQ + no * 32
-                c_br = (mo * 32 + 16) * SEQ + no * 32 + 16
+                c_tl = _i64((mo * 32) * SEQ + no * 32)
+                c_tr = _i64((mo * 32) * SEQ + no * 32 + 16)
+                c_bl = _i64((mo * 32 + 16) * SEQ + no * 32)
+                c_br = _i64((mo * 32 + 16) * SEQ + no * 32 + 16)
                 T.evaluate(_tilestored(4, S.access_ptr("w", offset=c_tl), SEQ * 4))
                 T.evaluate(_tilestored(5, S.access_ptr("w", offset=c_tr), SEQ * 4))
                 T.evaluate(_tilestored(6, S.access_ptr("w", offset=c_bl), SEQ * 4))
@@ -621,10 +621,10 @@ def make_mha_nf_full_softmax_fused(SEQ, D):
                 T.evaluate(_tilezero(4)); T.evaluate(_tilezero(5))
                 T.evaluate(_tilezero(6)); T.evaluate(_tilezero(7))
                 for ko in T.serial(SEQ // 32):
-                    a_top = (mo * 32) * SEQ + ko * 32
-                    a_bot = (mo * 32 + 16) * SEQ + ko * 32
-                    b_left = (ko * 16) * (D * 2) + (no * 32) * 2
-                    b_right = (ko * 16) * (D * 2) + (no * 32 + 16) * 2
+                    a_top = _i64((mo * 32) * SEQ + ko * 32)
+                    a_bot = _i64((mo * 32 + 16) * SEQ + ko * 32)
+                    b_left = _i64((ko * 16) * (D * 2) + (no * 32) * 2)
+                    b_right = _i64((ko * 16) * (D * 2) + (no * 32 + 16) * 2)
                     T.evaluate(_tileloadd(0, P.access_ptr("r", offset=a_top), SEQ * 2))
                     T.evaluate(_tileloadd(1, P.access_ptr("r", offset=a_bot), SEQ * 2))
                     T.evaluate(_tileloadd(2, V_packed.access_ptr("r", offset=b_left), D * 4))
@@ -633,10 +633,10 @@ def make_mha_nf_full_softmax_fused(SEQ, D):
                     T.evaluate(_tdpbf16ps(5, 0, 3))
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
-                o_tl = (mo * 32) * D + no * 32
-                o_tr = (mo * 32) * D + no * 32 + 16
-                o_bl = (mo * 32 + 16) * D + no * 32
-                o_br = (mo * 32 + 16) * D + no * 32 + 16
+                o_tl = _i64((mo * 32) * D + no * 32)
+                o_tr = _i64((mo * 32) * D + no * 32 + 16)
+                o_bl = _i64((mo * 32 + 16) * D + no * 32)
+                o_br = _i64((mo * 32 + 16) * D + no * 32 + 16)
                 T.evaluate(_tilestored(4, O.access_ptr("w", offset=o_tl), D * 4))
                 T.evaluate(_tilestored(5, O.access_ptr("w", offset=o_tr), D * 4))
                 T.evaluate(_tilestored(6, O.access_ptr("w", offset=o_bl), D * 4))

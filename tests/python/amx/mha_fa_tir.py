@@ -67,6 +67,11 @@ def _tdpbf16ps(dst, a, b):
         T.uint8(dst), T.uint8(a), T.uint8(b), dtype="")
 
 
+def _i64(x):
+    """Cast an offset to i64. Avoids LLVM i32→i64 sign-ext spills around AMX intrinsics."""
+    return T.cast(x, "int64")
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Vectorized helpers (return TIR expressions) — used inside prim_funcs
 # ─────────────────────────────────────────────────────────────────────
@@ -240,10 +245,10 @@ def make_mha_fa(SEQ, D, Mq=32, Nk=128):
                         T.evaluate(_tilezero(6))
                         T.evaluate(_tilezero(7))
                         for ko in T.serial(D_kb):
-                            q_top_off = (mo * Mq + mbo * 32) * D + ko * 32
-                            q_bot_off = (mo * Mq + mbo * 32 + 16) * D + ko * 32
-                            k_left_off  = (ko * 16) * N_packed_K + (no * Nk + nbo * 32) * 2
-                            k_right_off = (ko * 16) * N_packed_K + (no * Nk + nbo * 32 + 16) * 2
+                            q_top_off = _i64((mo * Mq + mbo * 32) * D + ko * 32)
+                            q_bot_off = _i64((mo * Mq + mbo * 32 + 16) * D + ko * 32)
+                            k_left_off  = _i64((ko * 16) * N_packed_K + (no * Nk + nbo * 32) * 2)
+                            k_right_off = _i64((ko * 16) * N_packed_K + (no * Nk + nbo * 32 + 16) * 2)
                             T.evaluate(_tileloadd(0, Q.access_ptr("r", offset=q_top_off), a_row_bytes_Q))
                             T.evaluate(_tileloadd(1, Q.access_ptr("r", offset=q_bot_off), a_row_bytes_Q))
                             T.evaluate(_tileloadd(2, K_packed.access_ptr("r", offset=k_left_off),  b_row_bytes_K))
@@ -252,10 +257,10 @@ def make_mha_fa(SEQ, D, Mq=32, Nk=128):
                             T.evaluate(_tdpbf16ps(5, 0, 3))
                             T.evaluate(_tdpbf16ps(6, 1, 2))
                             T.evaluate(_tdpbf16ps(7, 1, 3))
-                        s_tl_off = (mbo * 32     ) * Nk + nbo * 32
-                        s_tr_off = (mbo * 32     ) * Nk + nbo * 32 + 16
-                        s_bl_off = (mbo * 32 + 16) * Nk + nbo * 32
-                        s_br_off = (mbo * 32 + 16) * Nk + nbo * 32 + 16
+                        s_tl_off = _i64((mbo * 32     ) * Nk + nbo * 32)
+                        s_tr_off = _i64((mbo * 32     ) * Nk + nbo * 32 + 16)
+                        s_bl_off = _i64((mbo * 32 + 16) * Nk + nbo * 32)
+                        s_br_off = _i64((mbo * 32 + 16) * Nk + nbo * 32 + 16)
                         T.evaluate(_tilestored(4, S_buf.access_ptr("w", offset=s_tl_off), s_row_bytes))
                         T.evaluate(_tilestored(5, S_buf.access_ptr("w", offset=s_tr_off), s_row_bytes))
                         T.evaluate(_tilestored(6, S_buf.access_ptr("w", offset=s_bl_off), s_row_bytes))
@@ -301,19 +306,19 @@ def make_mha_fa(SEQ, D, Mq=32, Nk=128):
                 # ───── Step C: O_acc += P_buf @ V_subblock  ───────────────
                 for mbo in T.serial(M_pair):
                     for nbo in T.serial(D_nb):
-                        o_tl_off = (mbo * 32     ) * D + nbo * 32
-                        o_tr_off = (mbo * 32     ) * D + nbo * 32 + 16
-                        o_bl_off = (mbo * 32 + 16) * D + nbo * 32
-                        o_br_off = (mbo * 32 + 16) * D + nbo * 32 + 16
+                        o_tl_off = _i64((mbo * 32     ) * D + nbo * 32)
+                        o_tr_off = _i64((mbo * 32     ) * D + nbo * 32 + 16)
+                        o_bl_off = _i64((mbo * 32 + 16) * D + nbo * 32)
+                        o_br_off = _i64((mbo * 32 + 16) * D + nbo * 32 + 16)
                         T.evaluate(_tileloadd(4, O_acc.access_ptr("rw", offset=o_tl_off), o_row_bytes))
                         T.evaluate(_tileloadd(5, O_acc.access_ptr("rw", offset=o_tr_off), o_row_bytes))
                         T.evaluate(_tileloadd(6, O_acc.access_ptr("rw", offset=o_bl_off), o_row_bytes))
                         T.evaluate(_tileloadd(7, O_acc.access_ptr("rw", offset=o_br_off), o_row_bytes))
                         for ko in T.serial(Nk_kb):
-                            p_top_off = (mbo * 32     ) * Nk + ko * 32
-                            p_bot_off = (mbo * 32 + 16) * Nk + ko * 32
-                            v_left_off  = (no * (Nk // 2) + ko * 16) * N_packed_V + (nbo * 32) * 2
-                            v_right_off = (no * (Nk // 2) + ko * 16) * N_packed_V + (nbo * 32 + 16) * 2
+                            p_top_off = _i64((mbo * 32     ) * Nk + ko * 32)
+                            p_bot_off = _i64((mbo * 32 + 16) * Nk + ko * 32)
+                            v_left_off  = _i64((no * (Nk // 2) + ko * 16) * N_packed_V + (nbo * 32) * 2)
+                            v_right_off = _i64((no * (Nk // 2) + ko * 16) * N_packed_V + (nbo * 32 + 16) * 2)
                             T.evaluate(_tileloadd(0, P_buf.access_ptr("r", offset=p_top_off), a_row_bytes_P))
                             T.evaluate(_tileloadd(1, P_buf.access_ptr("r", offset=p_bot_off), a_row_bytes_P))
                             T.evaluate(_tileloadd(2, V_packed.access_ptr("r", offset=v_left_off),  b_row_bytes_V))

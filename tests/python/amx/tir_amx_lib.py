@@ -59,6 +59,10 @@ def _tdpbf16ps(dst, a, b):
         T.uint8(dst), T.uint8(a), T.uint8(b), dtype="")
 
 
+def _i64(x):
+    return T.cast(x, "int64")
+
+
 def make_pack_B_func(N, K):
     """Build a TIR prim_func that packs B[N, K] bf16 (NT form) into
        B_packed[K/2, N*2] using a sequential nested loop."""
@@ -134,10 +138,10 @@ def make_gemm_2x2_func(M, N, K):
 
                 for ko in T.serial(Ko):
                     # offsets in elements (uint16 for A,B_packed; fp32 for C)
-                    a_top_off = (mo * 32) * K + ko * 32
-                    a_bot_off = (mo * 32 + 16) * K + ko * 32
-                    b_left_off  = (ko * 16) * N_packed + (no * 32) * 2
-                    b_right_off = (ko * 16) * N_packed + (no * 32 + 16) * 2
+                    a_top_off = _i64((mo * 32) * K + ko * 32)
+                    a_bot_off = _i64((mo * 32 + 16) * K + ko * 32)
+                    b_left_off  = _i64((ko * 16) * N_packed + (no * 32) * 2)
+                    b_right_off = _i64((ko * 16) * N_packed + (no * 32 + 16) * 2)
 
                     T.evaluate(_tileloadd(0, A.access_ptr("r", offset=a_top_off), a_row_bytes))
                     T.evaluate(_tileloadd(1, A.access_ptr("r", offset=a_bot_off), a_row_bytes))
@@ -149,10 +153,10 @@ def make_gemm_2x2_func(M, N, K):
                     T.evaluate(_tdpbf16ps(6, 1, 2))
                     T.evaluate(_tdpbf16ps(7, 1, 3))
 
-                c_tl = (mo * 32) * N + no * 32
-                c_tr = (mo * 32) * N + no * 32 + 16
-                c_bl = (mo * 32 + 16) * N + no * 32
-                c_br = (mo * 32 + 16) * N + no * 32 + 16
+                c_tl = _i64((mo * 32) * N + no * 32)
+                c_tr = _i64((mo * 32) * N + no * 32 + 16)
+                c_bl = _i64((mo * 32 + 16) * N + no * 32)
+                c_br = _i64((mo * 32 + 16) * N + no * 32 + 16)
                 T.evaluate(_tilestored(4, C.access_ptr("w", offset=c_tl), c_row_bytes))
                 T.evaluate(_tilestored(5, C.access_ptr("w", offset=c_tr), c_row_bytes))
                 T.evaluate(_tilestored(6, C.access_ptr("w", offset=c_bl), c_row_bytes))

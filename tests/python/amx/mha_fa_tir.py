@@ -93,10 +93,10 @@ def _vec_cvt32_to_bf16x32(vlo, vhi):
         vhi, vlo, dtype="int16x32")
 
 def _vec_exp(x):
-    """Vectorized exp on float32x16 — fast Cephes 2^x degree-4 polynomial.
+    """Vectorized exp on float32x16 — fast degree-3 2^frac polynomial.
 
-    Accuracy: ~1 ulp relative error, sufficient for softmax bf16 output.
-    Throughput: ~7 FMAs per 16-lane vector.
+    Accuracy: ~0.2% rel err, sufficient for softmax bf16 output (~0.4%).
+    Throughput: ~5 FMAs per 16-lane vector.
     """
     # Clamp to avoid over/underflow in ldexp
     x = T.max(x, T.broadcast(T.float32(-87.0), 16))
@@ -105,14 +105,12 @@ def _vec_exp(x):
     fx = x * log2e
     fxr = _vec_round(fx)
     frac = fx - fxr  # in [-0.5, 0.5]
-    # 2^frac polynomial coefficients (degree 4)
-    c0 = T.broadcast(T.float32(1.0),       16)
-    c1 = T.broadcast(T.float32(0.6931472), 16)
-    c2 = T.broadcast(T.float32(0.2402266), 16)
-    c3 = T.broadcast(T.float32(0.0555041), 16)
-    c4 = T.broadcast(T.float32(0.0096183), 16)
-    p = c4 * frac + c3
-    p = p  * frac + c2
+    # 2^frac degree-3 polynomial (~0.2% rel error)
+    c0 = T.broadcast(T.float32(1.0),         16)
+    c1 = T.broadcast(T.float32(0.69314718),  16)
+    c2 = T.broadcast(T.float32(0.24022651),  16)
+    c3 = T.broadcast(T.float32(0.0555041),   16)
+    p = c3 * frac + c2
     p = p  * frac + c1
     p = p  * frac + c0
     # 2^ipart by adding to IEEE-754 exponent

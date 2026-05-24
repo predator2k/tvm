@@ -21,7 +21,7 @@ ctypes.CDLL(os.path.join(_BUILD, "libtvm_ffi.so"), mode=ctypes.RTLD_GLOBAL)
 ctypes.CDLL(os.path.join(_BUILD, "libtvm_ffi_testing.so"), mode=ctypes.RTLD_GLOBAL)
 
 import tvm
-from mha_fa_tir import make_pack_K, make_pack_V, init_amx, fp32_to_bf16, mha_numpy
+from mha_fa_tir import make_pack_K, make_pack_V, init_amx, fp32_to_bf16, mha_numpy, make_mha_fa
 from mha_nf_tir import (
     make_mha_nonfused_one,
     make_mha_nf_fused_max,
@@ -69,38 +69,46 @@ def run(SEQ, D, variant_factory, N_WARM=15, N_ITER=120):
 
 
 def main():
-    # (SEQ, D, variant_name, variant_factory)
+    # (label, SEQ, D, variant_name, variant_factory)
+    # Variant rule of thumb:
+    #   small/medium SEQ (S fits in L2): nf_fmax wins
+    #   small/medium SEQ + small D: mblock with tuned Mq wins
+    #   large SEQ (S exceeds L2): FlashAttention (FA) wins, tuned Mq=Nk=512
     configs = [
-        ("SEQ=512  D=1024", 512, 1024, "nf_fmax",
-            make_mha_nf_fused_max),
-        ("SEQ=512  D= 768", 512, 768, "nf_fmax",
-            make_mha_nf_fused_max),
-        ("SEQ=1024 D= 512", 1024, 512, "nf_fmax",
-            make_mha_nf_fused_max),
+        ("SEQ=512  D=1024", 512, 1024, "nf_fmax",        make_mha_nf_fused_max),
+        ("SEQ=512  D= 768", 512, 768,  "nf_fmax",        make_mha_nf_fused_max),
+        ("SEQ=1024 D= 512", 1024, 512, "nf_fmax",        make_mha_nf_fused_max),
         ("SEQ=1024 D= 256", 1024, 256, "mblock_Mq64",
             lambda S, D: make_mha_mblock_fused(S, D, 64)),
         ("SEQ=1024 D= 128", 1024, 128, "mblock_Mq64",
             lambda S, D: make_mha_mblock_fused(S, D, 64)),
-        ("SEQ=2048 D= 128", 2048, 128, "mblock_Mq32",
-            lambda S, D: make_mha_mblock_fused(S, D, 32)),
-        ("SEQ=2048 D= 256", 2048, 256, "mblock_Mq32",
-            lambda S, D: make_mha_mblock_fused(S, D, 32)),
+        ("SEQ=2048 D= 512", 2048, 512, "fa_Mq128_Nk512",
+            lambda S, D: make_mha_fa(S, D, 128, 512)),
+        ("SEQ=2048 D=1024", 2048, 1024, "fa_Mq512_Nk512",
+            lambda S, D: make_mha_fa(S, D, 512, 512)),
+        ("SEQ=4096 D= 512", 4096, 512, "fa_Mq256_Nk512",
+            lambda S, D: make_mha_fa(S, D, 256, 512)),
+        ("SEQ=4096 D=1024", 4096, 1024, "fa_Mq512_Nk512",
+            lambda S, D: make_mha_fa(S, D, 512, 512)),
     ]
-    print("=" * 80)
-    print("Pure-TVM-TIR MHA on AMX BF16 (Xeon Gold 6526Y, single core)")
-    print("=" * 80)
-    print(f"{'Config':<22} {'Variant':<14} {'Best':>9} {'Median':>9} {'GFLOPS':>8} {'rel err':>8}")
-    print("-" * 80)
+    print("=" * 88)
+    print("Pure-TVM-TIR MHA on AMX BF16 (Xeon Gold 6526Y / Emerald Rapids, single core)")
+    print("=" * 88)
+    print(f"{'Config':<22} {'Variant':<18} {'Best':>9} {'Median':>9} {'GFLOPS':>8} {'rel err':>8}")
+    print("-" * 88)
     for label, SEQ, D, name, factory in configs:
         t_best, t_med, rel = run(SEQ, D, factory)
         flops = 4.0 * SEQ * SEQ * D
         gf = flops / t_best / 1e9
-        print(f"{label:<22} {name:<14} {t_best*1e6:>7.0f}us {t_med*1e6:>7.0f}us "
+        unit = "us" if t_best < 1e-3 else "ms"
+        scale_t = 1e6 if t_best < 1e-3 else 1e3
+        print(f"{label:<22} {name:<18} {t_best*scale_t:>7.1f}{unit} {t_med*scale_t:>7.1f}{unit} "
               f"{gf:>8.0f} {rel:>7.2%}")
-    print("-" * 80)
-    print("Notes: nf_fmax = non-fused GEMMs with pass-1 max fused into GEMM-A;")
-    print("       mblock_MqN = per-M-block fused softmax with row-block size N.")
-    print("       All variants are pure TIR using LLVM AMX/AVX-512 intrinsics.")
+    print("-" * 88)
+    print("Variants (all pure TIR + LLVM AMX/AVX-512 intrinsics, no C/C++ helpers):")
+    print("  nf_fmax    : non-fused GEMMs with pass-1 max fused into GEMM-A.")
+    print("  mblock_MqN : per-M-block fused softmax, row-block size N.")
+    print("  fa_MqA_NkB : FlashAttention-style fused, Mq=A row-block, Nk=B K-block.")
 
 
 if __name__ == "__main__":
